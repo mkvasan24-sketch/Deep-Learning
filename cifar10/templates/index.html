@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIFAR Vision — AI-Powered CIFAR-10 Image Classification</title>
+    <meta name="description" content="Production-quality CIFAR-10 image classification web application powered by Keras and Flask. Upload an image to predict its category with real-time confidence scores.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Application Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Background Ambient Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <div class="app-container">
+        <!-- Header / Hero Section -->
+        <header class="hero-section">
+            <div class="hero-badges">
+                <span class="badge badge-status">
+                    <span class="pulse-dot"></span>
+                    {{ 'MODEL ONLINE' if model_loaded else 'MODEL OFFLINE' }}
+                </span>
+                <span class="badge badge-tech">CIFAR-10 • 10 Classes • Keras Sequential DNN</span>
+            </div>
+            <h1 class="hero-title">CIFAR <span class="gradient-text">Vision</span></h1>
+            <p class="hero-tagline">See what AI sees.</p>
+            <p class="hero-description">
+                Upload any image to let your trained deep neural network identify which CIFAR-10 category it belongs to, complete with confidence metrics and top probability distributions.
+            </p>
+        </header>
+
+        <!-- Toast Notifications Container -->
+        <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+        <!-- Main Workspace: 2-Column Responsive Layout -->
+        <main class="workspace-grid">
+            <!-- Left Column: Upload & Studio -->
+            <section class="card studio-card" aria-labelledby="studioHeading">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <span class="card-icon">📷</span>
+                        <h2 id="studioHeading" class="card-title">Image Input Studio</h2>
+                    </div>
+                    <span class="card-badge">Step 1</span>
+                </div>
+
+                <!-- Quick Samples Bar -->
+                <div class="sample-selector-area">
+                    <span class="sample-label">Quick Test Samples:</span>
+                    <div class="sample-buttons-row">
+                        <button type="button" class="btn-sample" data-sample="airplane.png" title="Test with Airplane sample">✈️ Airplane</button>
+                        <button type="button" class="btn-sample" data-sample="automobile.png" title="Test with Automobile sample">🚗 Car</button>
+                        <button type="button" class="btn-sample" data-sample="cat.png" title="Test with Cat sample">🐱 Cat</button>
+                        <button type="button" class="btn-sample" data-sample="dog.png" title="Test with Dog sample">🐶 Dog</button>
+                        <button type="button" class="btn-sample" data-sample="ship.png" title="Test with Ship sample">🚢 Ship</button>
+                    </div>
+                </div>
+
+                <!-- Drag & Drop Zone -->
+                <div id="dropZone" class="dropzone" tabindex="0" role="button" aria-label="Upload an image by clicking or dragging and dropping here">
+                    <input type="file" id="imageInput" accept=".jpg, .jpeg, .png, .webp" style="display: none;">
+                    
+                    <div id="emptyUploadState" class="empty-upload-content">
+                        <div class="upload-icon-container">
+                            <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <h3 class="upload-headline">Upload an image</h3>
+                        <p class="upload-subtext">Drag &amp; drop your image here or <span class="browse-link">browse files</span></p>
+                        <div class="upload-format-tags">
+                            <span class="tag">JPG</span>
+                            <span class="tag">JPEG</span>
+                            <span class="tag">PNG</span>
+                            <span class="tag">WEBP</span>
+                            <span class="tag">Max 10 MB</span>
+                        </div>
+                    </div>
+
+                    <!-- Image Preview (Revealed when file selected) -->
+                    <div id="previewContainer" class="preview-container hidden">
+                        <div class="preview-viewport">
+                            <img id="previewImage" src="" alt="Uploaded image preview" class="preview-img">
+                            <div class="preview-overlay-info">
+                                <span class="preview-badge">Preview</span>
+                            </div>
+                        </div>
+                        <div class="preview-meta-bar">
+                            <div class="meta-item">
+                                <span class="meta-label">File:</span>
+                                <span id="metaFileName" class="meta-value">photo.jpg</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Dimensions:</span>
+                                <span id="metaDimensions" class="meta-value">-- × --</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Size:</span>
+                                <span id="metaFileSize" class="meta-value">-- KB</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="studio-actions">
+                    <button type="button" id="predictBtn" class="btn btn-primary" disabled>
+                        <span class="btn-spinner hidden" id="btnSpinner"></span>
+                        <span class="btn-icon" id="btnIcon">✨</span>
+                        <span id="predictBtnText">Predict Image</span>
+                    </button>
+                    <button type="button" id="clearBtn" class="btn btn-ghost" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                        </svg>
+                        <span>Clear</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Right Column: Predictions & Deck -->
+            <section class="card deck-card" aria-labelledby="deckHeading">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <span class="card-icon">🧠</span>
+                        <h2 id="deckHeading" class="card-title">Prediction &amp; Analysis Deck</h2>
+                    </div>
+                    <span class="card-badge">Step 2</span>
+                </div>
+
+                <!-- State 1: Idle Empty State -->
+                <div id="deckEmptyState" class="deck-empty-state">
+                    <div class="radar-scan-icon">
+                        <div class="scan-ring ring-1"></div>
+                        <div class="scan-ring ring-2"></div>
+                        <div class="scan-ring ring-3"></div>
+                        <span class="scan-center-emoji">🔮</span>
+                    </div>
+                    <h3 class="empty-state-title">Awaiting Image</h3>
+                    <p class="empty-state-desc">
+                        Upload or select a sample image on the left and click <strong>Predict Image</strong> to run neural network inference.
+                    </p>
+                </div>
+
+                <!-- State 2: Analyzing / Thinking State -->
+                <div id="deckLoadingState" class="deck-loading-state hidden">
+                    <div class="loading-scanner">
+                        <div class="scanner-bar"></div>
+                    </div>
+                    <div class="pulse-icon">⚡</div>
+                    <h3 class="loading-title">AI is analyzing image...</h3>
+                    <p class="loading-desc">Resizing to 32×32, normalizing RGB tensors, and calculating layer activations.</p>
+                </div>
+
+                <!-- State 3: Prediction Results Content -->
+                <div id="deckResultState" class="deck-result-state hidden">
+                    <!-- Winner Banner Card -->
+                    <div class="winner-card">
+                        <div class="winner-label">PRIMARY PREDICTION</div>
+                        <div class="winner-hero">
+                            <span id="winnerEmoji" class="winner-emoji">🐱</span>
+                            <div class="winner-details">
+                                <h3 id="winnerName" class="winner-name">CAT</h3>
+                                <div class="winner-confidence-row">
+                                    <span class="winner-confidence-num" id="winnerConfidence">87.42%</span>
+                                    <span class="winner-confidence-label">Confidence</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Animated Primary Meter Bar -->
+                        <div class="meter-track">
+                            <div id="winnerMeterFill" class="meter-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Top Predictions Section -->
+                    <div class="top-predictions-box">
+                        <div class="section-subheading">
+                            <span>Top Predictions Ranked</span>
+                            <span class="subheading-hint">Top 3 Probabilities</span>
+                        </div>
+                        <div id="topPredictionsList" class="top-list">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Technical Telemetry -->
+                    <div class="telemetry-grid">
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Inference Time</span>
+                            <span id="telLatency" class="telemetry-value">-- ms</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Model Input</span>
+                            <span class="telemetry-value">32 × 32 × 3</span>
+                        </div>
+                        <div class="telemetry-item">
+                            <span class="telemetry-label">Normalization</span>
+                            <span class="telemetry-value">[0.0, 1.0]</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- CIFAR-10 Categories Reference Section -->
+        <section class="info-section">
+            <div class="section-header-centered">
+                <h2 class="section-title">Supported CIFAR-10 Categories</h2>
+                <p class="section-desc">
+                    This neural network was trained exclusively on the 10 distinct classes of the CIFAR-10 benchmark dataset.
+                </p>
+            </div>
+
+            <div class="categories-grid">
+                {% for item in classes %}
+                <div class="category-pill" title="{{ item.description }}">
+                    <span class="cat-emoji">{{ item.emoji }}</span>
+                    <span class="cat-name">{{ item.displayName }}</span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Model Limitation Banner -->
+            <div class="limitation-callout">
+                <div class="callout-icon">ℹ️</div>
+                <div class="callout-body">
+                    <h3 class="callout-title">Important Model Architecture &amp; Dataset Scope</h3>
+                    <p class="callout-text">
+                        The underlying Keras model features a <code>Flatten(32×32×3)</code> input layer mapped through three dense ReLU layers (312, 256, 128 units) to a 10-way Softmax output. It is purpose-built to recognize the 10 classes above. Real-world images containing objects outside these 10 categories will be mapped to the closest mathematical representation among these classes.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>CIFAR Vision • Built with Flask, TensorFlow, Keras, and Modern Web Standards</p>
+        </footer>
+    </div>
+
+    <!-- Application Logic Script -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
